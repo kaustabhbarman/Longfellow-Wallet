@@ -1,5 +1,7 @@
 package org.multipaz.samples.wallet.cmp
 
+import org.multipaz.samples.wallet.cmp.ui.CardArtRenderer
+import org.multipaz.documenttype.DocumentTypeRepository
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -56,7 +58,7 @@ const val LOCAL_TEST_MDL_DISPLAY_NAME = "Test mDL (local)"
 suspend fun issueLocalTestMdl(
     documentStore: DocumentStore,
     secureArea: SecureArea,
-    cardArt: ByteString?,
+    documentTypeRepository: DocumentTypeRepository,
 ): Document {
     val now = Clock.System.now().truncateToWholeSeconds()
 
@@ -119,7 +121,6 @@ suspend fun issueLocalTestMdl(
     val document = documentStore.createDocument(
         displayName = LOCAL_TEST_MDL_DISPLAY_NAME,
         typeDisplayName = documentType.displayName,
-        cardArt = cardArt,
     )
 
     val signedAt = now - 1.hours
@@ -179,7 +180,18 @@ suspend fun issueLocalTestMdl(
         }
     )
     mdocCredential.certify(ByteString(issuerProvidedAuthenticationData))
+    val claims = mdocCredential.getClaims(
+    documentTypeRepository = documentTypeRepository)
+    val renderedCardArt = CardArtRenderer.render(claims)
 
-    Logger.i(TAG, "Issued local test mDL, document ${document.identifier}, MSO ${taggedEncodedMso.size} bytes")
+    if (renderedCardArt != null) {
+        document.edit {
+            cardArt = ByteString(renderedCardArt)
+        }
+        Logger.i(
+    TAG,
+    "Personalized card art stored: ${renderedCardArt.size} bytes"
+    )
+    }
     return document
 }

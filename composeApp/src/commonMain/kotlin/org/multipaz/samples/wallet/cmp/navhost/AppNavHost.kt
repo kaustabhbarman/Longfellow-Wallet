@@ -52,6 +52,9 @@ fun AppNavHost(
                 activityEventLogger = app.activityEventLogger,
                 issuanceActivityStore = app.issuanceActivityStore,
                 onCreateTestMdl = { app.createLocalTestMdl() },
+                onCredentialOfferScanned = { uri ->
+                    app.handleUrl(uri)
+                },
             )
         }
 

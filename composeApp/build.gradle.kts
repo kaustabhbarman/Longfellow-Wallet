@@ -24,6 +24,7 @@ kotlin {
     compilerOptions {
         allWarningsAsErrors = true
         optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 
     listOf(
@@ -52,6 +53,8 @@ kotlin {
             implementation(libs.androidx.appcompat)
             implementation(libs.ktor.client.android)
             implementation(libs.multipaz.longfellow)
+            implementation("androidx.credentials:credentials:1.6.0")
+            implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
         }
         commonMain.dependencies {
             implementation(compose.runtime)

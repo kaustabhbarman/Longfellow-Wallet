@@ -1,5 +1,6 @@
 package org.multipaz.samples.wallet.cmp.navhost
 
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.compose.NavHost
@@ -35,6 +36,7 @@ fun WalletNavHost(
     activityEventLogger: SimpleEventLogger,
     issuanceActivityStore: IssuanceActivityStore,
     onCreateTestMdl: () -> Unit = {},
+    onCredentialOfferScanned: (String) -> Unit = {},
 ) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
@@ -87,6 +89,7 @@ fun WalletNavHost(
             WalletScreen(
                 documentModel = documentModel,
                 settingsModel = settingsModel,
+                presentmentSource = presentmentSource,
                 onDocumentSelected = { documentInfo ->
                     navController.navigate(
                         WalletRoute.WalletDetails(
@@ -96,6 +99,7 @@ fun WalletNavHost(
                 },
                 onActivity = { navController.navigate(WalletRoute.Activity) },
                 onCreateTestMdl = onCreateTestMdl,
+                onCredentialOfferScanned = onCredentialOfferScanned,
             )
         }
 
@@ -130,6 +134,7 @@ fun WalletNavHost(
             DocumentDetailsScreen(
                 documentId = route.documentId,
                 documentModel = documentModel,
+                presentmentSource = presentmentSource,
                 onBack = { navController.popBackStack() },
                 onPersonalIdInfoClick = {
                     navController.navigate(
