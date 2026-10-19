@@ -1,5 +1,7 @@
 package org.multipaz.samples.wallet.cmp.ui
 
+import org.multipaz.cbor.Cbor
+import org.multipaz.util.Logger
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -106,6 +108,30 @@ fun DocumentClaimsScreen(
         claims = credential.getClaims(documentTypeRepository)
         if (credential is MdocCredential) {
             val mso = credential.mso
+
+            // TEMPORARY ZKP diagnostic
+            Logger.i(
+                "TEST_MSO",
+                "***** MSO DEBUG WAS REACHED *****"
+            )
+
+            Logger.i(
+                "TEST_MSO",
+                "docType = ${mso.docType}"
+            )
+
+            val encodedMso = Cbor.encode(mso.toDataItem())
+
+            Logger.i(
+                "TEST_MSO",
+                "MSO SIZE = ${encodedMso.size} BYTES"
+            )
+
+            Logger.i(
+                "TEST_MSO",
+                "MSO DATA = ${mso.toDataItem()}"
+            )
+
             certSignedDate = mso.signedAt
             certValidFrom = mso.validFrom
             certValidUntil = mso.validUntil

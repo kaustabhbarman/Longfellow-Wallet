@@ -87,6 +87,7 @@ fun WalletNavHost(
             WalletScreen(
                 documentModel = documentModel,
                 settingsModel = settingsModel,
+                presentmentSource = presentmentSource,
                 onDocumentSelected = { documentInfo ->
                     navController.navigate(
                         WalletRoute.WalletDetails(
@@ -130,6 +131,7 @@ fun WalletNavHost(
             DocumentDetailsScreen(
                 documentId = route.documentId,
                 documentModel = documentModel,
+                presentmentSource = presentmentSource,
                 onBack = { navController.popBackStack() },
                 onPersonalIdInfoClick = {
                     navController.navigate(

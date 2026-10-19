@@ -1,5 +1,8 @@
 package org.multipaz.samples.wallet.cmp
 
+import org.multipaz.prompt.PromptModel
+import kotlinx.io.bytestring.ByteString
+import org.multipaz.samples.wallet.cmp.ui.CardArtRenderer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,7 +26,6 @@ import io.ktor.client.HttpClient
 import io.ktor.http.Url
 import io.ktor.http.protocolWithAuthority
 import meinewallet.composeapp.generated.resources.Res
-import meinewallet.composeapp.generated.resources.card_generic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -37,6 +40,9 @@ import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.branding.Branding
 import org.multipaz.compose.document.DocumentModel
 import org.multipaz.compose.prompt.PromptDialogs
+import org.multipaz.prompt.ConsentPromptDialogModel
+import org.multipaz.prompt.getConsentPromptDialogModel
+import org.multipaz.prompt.requestConsent
 import org.multipaz.crypto.X509Cert
 import org.multipaz.digitalcredentials.DigitalCredentials
 import org.multipaz.digitalcredentials.getDefault
@@ -60,7 +66,7 @@ import org.multipaz.mdoc.zkp.ZkSystemRepository
 import org.multipaz.presentment.PresentmentSource
 import org.multipaz.presentment.SimplePresentmentSource
 import org.multipaz.presentment.uriSchemePresentment
-import org.multipaz.provisioning.DocumentProvisioningHandler
+import org.multipaz.samples.wallet.cmp.CustomDocumentProvisioningHandler
 import org.multipaz.provisioning.ProvisioningModel
 import kotlinx.coroutines.flow.collect
 import org.multipaz.samples.wallet.cmp.activity.IssuanceActivityStore
@@ -102,7 +108,7 @@ class App() {
     private var initialized = false
 
     private val urlsToOpen = Channel<String>()
-
+    private var activeConsentRequests = 0
     @OptIn(ExperimentalTime::class)
     suspend fun init() {
         initLock.withLock {
@@ -143,7 +149,9 @@ class App() {
                             ("30820251308201d7a0030201020210a692991c8d623cddbdd0928403bf4ea7300a06082a8648ce3d040303302b3129302706035504030c204f5746204d756c746970617a20546573744170702052656164657220526f6f74301e170d3234313230313030303030305a170d3334313230313030303030305a302b3129302706035504030c204f5746204d756c746970617a20546573744170702052656164657220526f6f743076301006072a8648ce3d020106052b8104002203620004f900f27bbd26d8ed2594f5cc8d58f1559cf79b993a6a04fec2287e2fbf5bee3caa525f7db1b7949e9c5a2c3f9c981dc72b7b70900edf995252a1b05cfbd0838648779b1ea7f98a07e51ba569259385605f332463b1f54e0e4a2c1cb0839db3d5a381bf3081bc300e0603551d0f0101ff04040302010630120603551d130101ff040830060101ff02010030560603551d1f044f304d304ba049a047864568747470733a2f2f6769746875622e636f6d2f6f70656e77616c6c65742d666f756e646174696f6e2d6c6162732f6964656e746974792d63726564656e7469616c2f63726c301d0603551d0e04160414ab651be056c29053f1dd7f6ce487be68de60c9f5301f0603551d23041830168014ab651be056c29053f1dd7f6ce487be68de60c9f5300a06082a8648ce3d0403030368003065023100d37d594bc8d71b5942600a4b8fc3655c287ea2cd4592ff728f783b08b55c7e4b832881a52dc4f314b113d4833655558602302ad5cd044047340ec529e031280ceee3e3147f8833f23bf215a1341145654b6179b4045842453ab9d15e3ee715765a22".fromHexByteString()),
                         metadata = TrustMetadata(
                             displayName = "Multipaz TestApp",
-                            displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+                            displayIcon = ByteString(
+    Res.readBytes("files/wallet-icons/testapp_icon.png")
+    ),
                         )
                 )
                 // From https://verifier.multipaz.org/identityreaderbackend/
@@ -152,7 +160,9 @@ class App() {
                         ("30820261308201E7A00302010202103925792727AC38B28778373ED2A9ADB9300A06082A8648CE3D0403033033310B300906035504060C0255533124302206035504030C1B4D756C746970617A204964656E7469747920526561646572204341301E170D3235303730353132323032315A170D3330303730353132323032315A3033310B300906035504060C0255533124302206035504030C1B4D756C746970617A204964656E74697479205265616465722043413076301006072A8648CE3D020106052B81040022036200043E145F98DA6C32EE4688C4A7DAEC6640046CFF0872E8F7A8DE3005462AE9488E92850B30E2D46FEEFC620A279BEB09470AB20C9F66C584E396A9625BC3E90DFBA54197A3668D901AAA41F493C89E4AC20689794FED1352CD2086413965006C54A381BF3081BC300E0603551D0F0101FF04040302010630120603551D130101FF040830060101FF02010030560603551D1F044F304D304BA049A047864568747470733A2F2F6769746875622E636F6D2F6F70656E77616C6C65742D666F756E646174696F6E2D6C6162732F6964656E746974792D63726564656E7469616C2F63726C301D0603551D0E04160414CFA4AF87907312962E4D7A17646ACC1C45719B21301F0603551D23041830168014CFA4AF87907312962E4D7A17646ACC1C45719B21300A06082A8648CE3D040303036800306502310090FB8F814BCC87DB42957D22B54D20BF45F44CE0CF5734167ED27F5E3E0F5FB57505B797B894175D2BD98BF16CE726EA02305BA4F1ECB894A9DBE27B9BBF988F233C2E0BB0B4BADAA3EC5B3EA9D99C58DAD26128A4B363849E32626A9D5C3CE3E4DA".fromHexByteString()),
                     metadata = TrustMetadata(
                         displayName = "Multipaz Identity Reader",
-                        displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+                        displayIcon = ByteString(
+    Res.readBytes("files/wallet-icons/identity_reader_icon.png")
+    ),
                     )
                 )
                 // Also from https://verifier.multipaz.org/identityreaderbackend/
@@ -161,7 +171,9 @@ class App() {
                         ("308202893082020FA003020102021041DFFB3D7133B2623E535E09D9C3B56E300A06082A8648CE3D0403033047310B300906035504060C0255533138303606035504030C2F4D756C746970617A204964656E74697479205265616465722043412028556E74727573746564204465766963657329301E170D3235303731393233303831345A170D3330303731393233303831345A3047310B300906035504060C0255533138303606035504030C2F4D756C746970617A204964656E74697479205265616465722043412028556E747275737465642044657669636573293076301006072A8648CE3D020106052B8104002203620004EA8A139ED395B79C877255FEF2138987262CFBB6CA1F72688D4E89F062C3CA05B2704531DAEC0304F93A007CD84F31A119F3794151306082C4D4352855A752F9C733D2FA32B4B462644769F2F7E53280F1AD519C443AE9462B923C64877EDF91A381BF3081BC300E0603551D0F0101FF04040302010630120603551D130101FF040830060101FF02010030560603551D1F044F304D304BA049A047864568747470733A2F2F6769746875622E636F6D2F6F70656E77616C6C65742D666F756E646174696F6E2D6C6162732F6964656E746974792D63726564656E7469616C2F63726C301D0603551D0E041604149BCFDAFD2059978E21869C7DD28AAF7481EBABC5301F0603551D230418301680149BCFDAFD2059978E21869C7DD28AAF7481EBABC5300A06082A8648CE3D0403030368003065023100A26AA37C97B6935EB64B959ACB7B04053723EFE0CFBDA2C972C96812C8FF1DA4E122C296A909502B180DBB5AC4FD7AF202307F1AAE9412B8162A5B29A7E2A9CEE00059A2A4F9B32370CE1A28E28E5378AD981FBD8D74D0DBDD0373C327595C1006CE".fromHexByteString()),
                     metadata = TrustMetadata(
                         displayName = "Multipaz Identity Reader (Untrusted Devices)",
-                        displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+                        displayIcon = ByteString(
+    Res.readBytes("files/wallet-icons/reader_untrusted_icon.png")
+    ),
                     )
                 )
                 // verifier.multipaz.org
@@ -187,7 +199,9 @@ class App() {
                     ),
                     metadata = TrustMetadata(
                         displayName = "Multipaz Online Verifier",
-                        displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+                        displayIcon = ByteString(
+    Res.readBytes("files/wallet-icons/online_verifier_icon.png")
+    ),
                     )
                 )
                 // ws.davidz25.net
@@ -212,7 +226,9 @@ class App() {
                     ),
                     metadata = TrustMetadata(
                         displayName = "David's Multipaz Verifier",
-                        displayIconUrl = "https://www.multipaz.org/multipaz-logo-200x200.png",
+                        displayIcon = ByteString(
+    Res.readBytes("files/wallet-icons/davids_verifier_icon.png")
+    ),
                     )
                 )
             }
@@ -231,6 +247,54 @@ class App() {
                     }
                     return@SimplePresentmentSource null
                 },
+                showConsentPromptFn = { requester, trustMetadata, credentialPresentmentData,
+                preselectedDocuments, onDocumentsInFocus ->
+                val consentStart = kotlin.time.TimeSource.Monotonic.markNow()
+                activeConsentRequests++
+
+                Logger.i(
+                    "ConsentTiming",
+                    "CONSENT REQUEST STARTED: active=$activeConsentRequests"
+                )
+                Logger.i("ConsentTiming", "1. Consent callback entered")
+
+                try {
+                    Logger.i("ConsentTiming", "2. Calling requestConsent")
+                    val activePromptModel = PromptModel.get()
+                    val result = activePromptModel.requestConsent(
+                        requester = requester,
+                        trustMetadata = trustMetadata,
+                        credentialPresentmentData = credentialPresentmentData,
+                        preselectedDocuments = preselectedDocuments,
+                        onDocumentsInFocus = {
+                            Logger.i(
+                                "ConsentTiming",
+                                "3. onDocumentsInFocus after ${consentStart.elapsedNow()}"
+                            )
+                            onDocumentsInFocus(it)
+                        }
+                    )
+                    Logger.i(
+                        "ConsentTiming",
+                        "4. requestConsent completed after ${consentStart.elapsedNow()}"
+                    )
+                    result
+                } catch (e: Exception) {
+                    Logger.e(
+                        "ConsentTiming",
+                        "requestConsent failed after ${consentStart.elapsedNow()}",
+                        e
+                    )
+                    throw e
+                } finally {
+                    activeConsentRequests--
+
+                    Logger.i(
+                        "ConsentTiming",
+                        "CONSENT REQUEST FINISHED: active=$activeConsentRequests"
+                    )
+                }
+            },
                 preferSignatureToKeyAgreement = true,
                 domainsMdocSignature = listOf("mdoc_user_auth"),
                 domainsKeyBoundSdJwt = listOf("sdjwt_user_auth"),
@@ -240,6 +304,55 @@ class App() {
             val digitalCredentials = DigitalCredentials.getDefault()
             if (digitalCredentials.registerAvailable) {
                 try {
+                    val documents = documentStore.listDocuments(sort = true)
+
+                    Logger.w(TAG, "========== DCAPI REGISTRATION TEST==========")
+                    Logger.w(TAG, "DCAPI TEST: Documents in DocumentStore = ${documents.size}")
+                    documents.forEachIndexed { index, document ->
+                        Logger.w(TAG, "DCAPI TEST: Document[$index]")
+                        Logger.w(TAG, "  id = ${document.identifier}")
+                        Logger.w(TAG, "  displayName = ${document.displayName}")
+                        Logger.w(TAG, "  typeDisplayName = ${document.typeDisplayName}")
+                        Logger.w(TAG, "  cardArt bytes = ${document.cardArt?.size ?: 0}")
+
+
+                        val credentials = document.getCertifiedCredentials()
+
+                        Logger.w(TAG, "  certified credentials = ${credentials.size}")
+
+                        credentials.forEachIndexed { credentialIndex, credential ->
+                            Logger.w(
+                                TAG,
+                                "  credential[$credentialIndex] = ${credential::class.simpleName}"
+                            )
+                        }
+                    }
+                    for (document in documents) {
+                        Logger.i(
+                            TAG,
+                            "Document: id=${document.identifier}, " +
+                                "displayName=${document.displayName}, " +
+                                "typeDisplayName=${document.typeDisplayName}, " +
+                                "cardArtBytes=${document.cardArt?.toByteArray()?.size ?: 0}"
+                        )
+
+                        val credentials = document.getCertifiedCredentials()
+
+                        Logger.i(
+                            TAG,
+                            "  Certified credentials: ${credentials.size}"
+                        )
+
+                        for (credential in credentials) {
+                            Logger.i(
+                                TAG,
+                                "  Credential: ${credential::class.simpleName}"
+                            )
+                        }
+                    }
+
+                    Logger.i(TAG, "========================================")
+
                     digitalCredentials.register(
                         documentStore = documentStore,
                         documentTypeRepository = documentTypeRepository,
@@ -252,26 +365,74 @@ class App() {
                 CoroutineScope(Dispatchers.Default).launch {
                     documentStore.eventFlow
                         .onEach { event ->
-                            Logger.i(
+
+                            Logger.w(TAG, "========== DOCUMENT STORE EVENT ==========")
+                            Logger.w(
                                 TAG,
-                                "DocumentStore event ${event::class.simpleName} ${event.documentId}"
+                                "Event = ${event::class.simpleName}, documentId = ${event.documentId}"
                             )
+
+                            val documents = documentStore.listDocuments(sort = true)
+
+                            Logger.w(
+                                TAG,
+                                "Documents AFTER EVENT = ${documents.size}"
+                            )
+
+                            documents.forEachIndexed { index, document ->
+
+                                Logger.w(TAG, "Document[$index]")
+                                Logger.w(TAG, "  id = ${document.identifier}")
+                                Logger.w(TAG, "  displayName = ${document.displayName}")
+                                Logger.w(TAG, "  typeDisplayName = ${document.typeDisplayName}")
+                                Logger.w(
+                                    TAG,
+                                    "  cardArt bytes = ${document.cardArt?.toByteArray()?.size ?: 0}"
+                                )
+
+                                val credentials = document.getCertifiedCredentials()
+
+                                Logger.w(
+                                    TAG,
+                                    "  certified credentials = ${credentials.size}"
+                                )
+
+                                credentials.forEachIndexed { credentialIndex, credential ->
+                                    Logger.w(
+                                        TAG,
+                                        "  credential[$credentialIndex] = ${credential::class.simpleName}"
+                                    )
+                                }
+                            }
+
                             try {
+
                                 digitalCredentials.register(
                                     documentStore = documentStore,
                                     documentTypeRepository = documentTypeRepository,
                                 )
+
+                                Logger.w(TAG, "DCAPI registration completed after event")
+
                             } catch (e: Throwable) {
-                                Logger.w(TAG, "Error registering with W3C DC API", e)
+                                Logger.w(
+                                    TAG,
+                                    "DCAPI registration failed after event",
+                                    e
+                                )
                             }
+
+                            Logger.w(TAG, "==========================================")
+
                         }
                         .launchIn(this)
                 }
             }
             provisioningModel = ProvisioningModel(
-                documentProvisioningHandler = DocumentProvisioningHandler(
+                documentProvisioningHandler = CustomDocumentProvisioningHandler(
                     documentStore = documentStore,
-                    secureArea = secureArea
+                    secureArea = secureArea,
+                    documentTypeRepository = documentTypeRepository
                 ),
                 httpClient = createProvisioningHttpClient(
                     AppPlatform.httpClientEngineFactory,
@@ -347,10 +508,16 @@ class App() {
         }
 
         val currentBranding = Branding.Current.collectAsState().value
+        val consentPromptScope = rememberCoroutineScope()
         currentBranding.theme {
             PromptDialogs(
                 promptModel = promptModel,
-                imageLoader = imageLoader
+                imageLoader = imageLoader,
+                excludeTypes = listOf(ConsentPromptDialogModel.DialogType)
+            )
+            ClaimConsentPromptDialog(
+                model = promptModel.getConsentPromptDialogModel(),
+                coroutineScope = consentPromptScope
             )
 
             AppNavHost(
@@ -364,22 +531,25 @@ class App() {
      * Issues an mDL locally (self-generated IACA/DS). See [issueLocalTestMdl] for
      * why this exists: hosted-issuer credentials currently break Longfellow ZKP.
      */
-    @OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
     fun createLocalTestMdl() {
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                val cardArt = org.jetbrains.compose.resources.getDrawableResourceBytes(
-                    org.jetbrains.compose.resources.getSystemResourceEnvironment(),
-                    Res.drawable.card_generic,
-                )
                 val document = issueLocalTestMdl(
                     documentStore = documentStore,
                     secureArea = secureArea,
-                    cardArt = kotlinx.io.bytestring.ByteString(cardArt),
+                    documentTypeRepository = documentTypeRepository,
                 )
-                Logger.i(TAG, "Local test mDL issued: ${document.identifier}")
+
+                Logger.i(
+                    TAG,
+                    "Local test mDL issued: ${document.identifier}"
+                )
             } catch (e: Throwable) {
-                Logger.e(TAG, "Local test mDL issuance failed", e)
+                Logger.e(
+                    TAG,
+                    "Local test mDL issuance failed",
+                    e
+                )
             }
         }
     }
