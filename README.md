@@ -1,6 +1,6 @@
-# meineWallet
+# LongfellowWallet
 
-**meineWallet** is a Kotlin Multiplatform (Android + iOS) digital identity wallet built on [Multipaz](https://www.multipaz.org/). It is the prototype artifact for a master's thesis on **privacy-preserving, ARF-aligned credential presentation using Zero-Knowledge Proofs (ZKPs)**.
+**LongfellowWallet** is a Kotlin Multiplatform (Android + iOS) digital identity wallet built on [Multipaz](https://www.multipaz.org/). It is the prototype artifact for a master's thesis on **privacy-preserving, ARF-aligned credential presentation using Zero-Knowledge Proofs (ZKPs)**.
 
 It demonstrates an end-to-end EUDI-style flow:
 
