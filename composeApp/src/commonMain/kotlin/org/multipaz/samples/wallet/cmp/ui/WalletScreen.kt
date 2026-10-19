@@ -63,6 +63,7 @@ fun WalletScreen(
     onDocumentSelected: (DocumentInfo) -> Unit,
     onActivity: () -> Unit = {},
     onCreateTestMdl: () -> Unit = {},
+    onCredentialOfferScanned: (String) -> Unit = {},
 ) {
 
     /*
@@ -590,6 +591,10 @@ fun WalletScreen(
             onPresentationUriScanned = { uri ->
                 showQrScanner = false
                 uriHandler.openUri(uri)
+            },
+            onCredentialOfferScanned = { uri ->
+                showQrScanner = false
+                onCredentialOfferScanned(uri)
             }
         )
     }

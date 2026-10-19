@@ -29,6 +29,7 @@ import org.multipaz.compose.qrcode.QrCodeScanner
 fun QrScannerDialog(
     onDismiss: () -> Unit,
     onPresentationUriScanned: (String) -> Unit,
+    onCredentialOfferScanned: (String) -> Unit,
 ) {
     val cameraPermission = rememberCameraPermissionState()
     val coroutineScope = rememberCoroutineScope()
@@ -46,7 +47,7 @@ fun QrScannerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Scan verifier QR code") },
+        title = { Text("Scan QR code") },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -54,7 +55,7 @@ fun QrScannerDialog(
             ) {
                 when {
                     cameraPermission.isGranted -> {
-                        Text("Point your camera at the verifier QR code.")
+                        Text("Point your camera at an issuer or verifier QR code.")
 
                         QrCodeScanner(
                             modifier = Modifier
@@ -73,11 +74,14 @@ fun QrScannerDialog(
                                             handled = true
                                             onPresentationUriScanned(normalized)
                                         }
-
-                                        "fido" -> {
-                                            errorMessage = "Scanned FIDO URI:\n$normalized"
+                                        "openid-credential-offer", "haip-vci" -> {
+                                            handled = true
+                                            onCredentialOfferScanned(normalized)
                                         }
-
+                                        "fido" -> {
+                                            handled = true
+                                            onPresentationUriScanned(normalized)
+                                        }
                                         else -> {
                                             errorMessage = "Unsupported QR URI scheme: $scheme"
                                         }
