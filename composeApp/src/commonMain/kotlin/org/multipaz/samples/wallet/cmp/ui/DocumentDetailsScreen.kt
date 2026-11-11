@@ -72,6 +72,10 @@ fun DocumentDetailsScreen(
         mutableStateOf<List<Claim>>(emptyList())
     }
 
+    var credentialType by remember(documentId) {
+        mutableStateOf(CredentialType.UNKNOWN)
+    }
+
     /*
      * Load the claims belonging to this document.
      */
@@ -84,12 +88,14 @@ fun DocumentDetailsScreen(
             val credential = credentials.firstOrNull()
 
             if (credential != null) {
+                credentialType = CredentialType.fromCredential(credential)
                 claims = credential.getClaims(
                     presentmentSource.documentTypeRepository
                 )
             }
         } catch (e: Throwable) {
             claims = emptyList()
+            credentialType = CredentialType.UNKNOWN
         }
     }
 
@@ -191,8 +197,9 @@ fun DocumentDetailsScreen(
                  * that is used by DocumentViewerScreen.
                  */
                 if (claims.isNotEmpty()) {
-                    DigitalDrivingLicenceCard(
+                    CredentialCard(
                         claims = claims,
+                        credentialType = credentialType,
                         modifier = Modifier.width(100.dp)
                     )
                 }

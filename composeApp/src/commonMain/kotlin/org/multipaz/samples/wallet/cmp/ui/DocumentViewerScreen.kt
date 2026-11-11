@@ -82,48 +82,23 @@ fun DocumentViewerScreen(
         mutableStateOf<List<Claim>>(emptyList())
     }
 
+    var credentialType by remember {
+        mutableStateOf(CredentialType.UNKNOWN)
+    }
+
     LaunchedEffect(documentId, documentInfo) {
         val document = documentInfo?.document ?: return@LaunchedEffect
 
         val credentials = document.getCertifiedCredentials()
         val credential = credentials.firstOrNull() ?: return@LaunchedEffect
 
+        credentialType = CredentialType.fromCredential(credential)
         claims = credential.getClaims(
             presentmentSource.documentTypeRepository
         )
     }
 
-    val portraitClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "portrait"
-    }
 
-    val givenNameClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "given_name"
-    }
-
-    val familyNameClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "family_name"
-    }
-
-    val birthDateClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "birth_date"
-    }
-
-    val documentNumberClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "document_number"
-    }
-
-    val issueDateClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "issue_date"
-    }
-
-    val expiryDateClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "expiry_date"
-    }
-
-    val issuingAuthorityClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "issuing_authority"
-    }
 
     Scaffold(
         topBar = {
@@ -165,15 +140,9 @@ fun DocumentViewerScreen(
                     modifier = Modifier.height(12.dp)
                 )
 
-                DigitalDrivingLicenceCard(
-                    portraitClaim = portraitClaim,
-                    givenNameClaim = givenNameClaim,
-                    familyNameClaim = familyNameClaim,
-                    birthDateClaim = birthDateClaim,
-                    documentNumberClaim = documentNumberClaim,
-                    issueDateClaim = issueDateClaim,
-                    expiryDateClaim = expiryDateClaim,
-                    issuingAuthorityClaim = issuingAuthorityClaim
+                CredentialCard(
+                    claims = claims,
+                    credentialType = credentialType
                 )
 
                 Spacer(
@@ -218,9 +187,7 @@ fun DocumentViewerScreen(
                             modifier = Modifier.height(4.dp)
                         )
 
-                        RenderClaimValue(
-                            claim = claim
-                        )
+                        RenderClaimValue(claim = claim.withPictureAttributeForCard())
 
                         if (index != claims.lastIndex) {
 
@@ -265,8 +232,12 @@ fun DigitalDrivingLicenceCard(
     claims: List<Claim>,
     modifier: Modifier = Modifier
 ) {
-    val portraitClaim = claims.firstOrNull {
-        it is MdocClaim && it.dataElementName == "portrait"
+    val portraitClaim = claims.firstOrNull { claim ->
+        when (claim) {
+            is MdocClaim -> claim.dataElementName == "portrait"
+            is JsonClaim -> claim.claimPath.firstOrNull()
+                ?.jsonPrimitive?.content == "picture"
+        }
     }
 
     val givenNameClaim = claims.firstOrNull {
@@ -577,7 +548,7 @@ fun DigitalDrivingLicenceCard(
                                 portraitClaim?.let { claim ->
 
                                     RenderClaimValue(
-                                        claim = claim.withPictureAttribute()
+                                        claim = claim.withPictureAttributeForCard()
                                     )
                                 }
                             }
@@ -761,28 +732,37 @@ private fun LicenceInfoBlock(
  * The portrait needs to be explicitly treated as a Picture
  * so RenderClaimValue() uses the image renderer.
  */
-private fun Claim.withPictureAttribute(): Claim {
+internal fun Claim.withPictureAttributeForCard(): Claim {
+    val isPictureClaim = when (this) {
+        is MdocClaim ->
+            dataElementName == "portrait" || dataElementName == "picture"
 
-    if (attribute?.type == DocumentAttributeType.Picture) {
-        return this
+        is JsonClaim -> {
+            val name = claimPath.lastOrNull()?.jsonPrimitive?.content
+            name == "portrait" || name == "picture"
+        }
     }
 
-    if (this is MdocClaim) {
+    if (!isPictureClaim) return this
+    if (attribute?.type == DocumentAttributeType.Picture) return this
 
-        return copy(
-            attribute = DocumentAttribute(
-                type = DocumentAttributeType.Picture,
-                identifier = dataElementName,
-                displayName = displayName,
-                description = "",
-                icon = null,
-                sampleValueMdoc = null,
-                sampleValueJson = null,
-                parentAttribute = null,
-                embeddedAttributes = emptyList()
-            )
-        )
+    val pictureAttribute = DocumentAttribute(
+        type = DocumentAttributeType.Picture,
+        identifier = when (this) {
+            is MdocClaim -> dataElementName
+            is JsonClaim -> claimPath.last().jsonPrimitive.content
+        },
+        displayName = displayName,
+        description = "",
+        icon = null,
+        sampleValueMdoc = null,
+        sampleValueJson = null,
+        parentAttribute = null,
+        embeddedAttributes = emptyList()
+    )
+
+    return when (this) {
+        is MdocClaim -> copy(attribute = pictureAttribute)
+        is JsonClaim -> copy(attribute = pictureAttribute)
     }
-
-    return this
 }

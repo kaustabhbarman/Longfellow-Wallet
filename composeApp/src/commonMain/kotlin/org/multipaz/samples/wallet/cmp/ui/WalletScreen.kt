@@ -205,6 +205,11 @@ fun WalletScreen(
                     >()
                 }
 
+            val credentialTypesByDocument =
+                remember {
+                    mutableStateMapOf<String, CredentialType>()
+                }
+
             /*
              * -------------------------------------------------
              * LOAD CLAIMS
@@ -229,6 +234,12 @@ fun WalletScreen(
                             credentials.firstOrNull()
 
                         if (credential != null) {
+
+                            val detectedType = CredentialType.fromCredential(credential)
+
+                            credentialTypesByDocument[
+                                documentInfo.identifier
+                            ] = detectedType
 
                             val documentClaims =
                                 credential.getClaims(
@@ -401,8 +412,12 @@ fun WalletScreen(
                                  * Digital Driving Licence.
                                  */
 
-                                DigitalDrivingLicenceCard(
-                                    claims = claims
+                                CredentialCard(
+                                    claims = claims,
+                                    credentialType =
+                                        credentialTypesByDocument[
+                                            documentInfo.identifier
+                                        ] ?: CredentialType.UNKNOWN
                                 )
 
                             } else {
