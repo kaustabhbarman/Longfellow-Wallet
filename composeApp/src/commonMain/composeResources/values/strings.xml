@@ -29,6 +29,8 @@
     <string name="activity_zkp_last_proof_none">No ZKP proof generated yet. Present with an mso_mdoc_zk request to measure.</string>
     <string name="activity_zkp_last_vp_token_title">Previous VP token payload size</string>
     <string name="activity_zkp_last_vp_token_none">No VP token measured yet. Complete an OpenID4VP presentation to measure.</string>
+    <string name="activity_zkp_last_mdoc_response_title">Previous mdoc device response size</string>
+    <string name="activity_zkp_last_mdoc_response_none">No mdoc device response measured yet. Complete an Android Digital Credentials API presentation to measure.</string>
     <string name="activity_zkp_last_peak_memory_title">Previous peak memory usage</string>
     <string name="activity_zkp_last_peak_cpu_title">Previous peak CPU utilisation</string>
     <string name="activity_zkp_peak_resource_none">Measured during ZKP proof generation (Android). Present with an mso_mdoc_zk request first.</string>

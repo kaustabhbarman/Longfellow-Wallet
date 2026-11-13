@@ -36,6 +36,8 @@ class IssuanceActivityStore(
 
     private val initMutex = Mutex()
     private val mutex = Mutex()
+    private var recordsCache = mutableMapOf<String, IssuanceActivityRecord>()
+    private var recordsCacheInitialized = false
 
     @Volatile
     private var tableInitialized = false
@@ -51,6 +53,8 @@ class IssuanceActivityStore(
 
     @Volatile
     private var activeSessionId: String? = null
+    @Volatile
+    private var latestUnlinkedSessionId: String? = null
 
     /** True between [prepareOfferForIssuance] and first [startNewSessionLocked]; buffers early HTTP log lines. */
     @Volatile
@@ -150,27 +154,32 @@ class IssuanceActivityStore(
 
     suspend fun onDocumentEvent(event: DocumentEvent) {
         if (event !is DocumentAdded) return
+
         mutex.withLock {
-            ensureTableLocked()
-            val rows = storage.getTable(tableSpec).enumerateWithData(limit = 10_000)
-            val records = rows.mapNotNull { (_, bytes) ->
-                try {
-                    json.decodeFromString<IssuanceActivityRecord>(bytes.toByteArray().decodeToString())
-                } catch (_: Exception) {
-                    null
-                }
-            }
-            val target = records
-                .filter {
-                    it.documentId == null &&
-                        (it.outcome == IssuanceOutcome.IN_PROGRESS || it.outcome == IssuanceOutcome.SUCCESS)
-                }
-                .maxByOrNull { it.startedAtEpochMs }
+            val sessionId = latestUnlinkedSessionId
                 ?: return@withLock
-            saveRecordLocked(target.copy(documentId = event.documentId))
+
+            val record = loadRecordLocked(sessionId)
+                ?: run {
+                    latestUnlinkedSessionId = null
+                    return@withLock
+                }
+
+            if (
+                record.documentId != null ||
+                (record.outcome != IssuanceOutcome.IN_PROGRESS &&
+                    record.outcome != IssuanceOutcome.SUCCESS)
+            ) {
+                latestUnlinkedSessionId = null
+                return@withLock
+            }
+
+            saveRecordLocked(
+                record.copy(documentId = event.documentId)
+            )
+            latestUnlinkedSessionId = null
         }
     }
-
     private fun transitionLine(
         previous: ProvisioningModel.State,
         current: ProvisioningModel.State,
@@ -187,6 +196,7 @@ class IssuanceActivityStore(
         val preHttp = preSessionHttpBuffer.toString().also { preSessionHttpBuffer.clear() }
         expectingIssuance = false
         activeSessionId = id
+        latestUnlinkedSessionId = id
         val record = IssuanceActivityRecord(
             id = id,
             startedAtEpochMs = System.currentTimeMillis(),
@@ -199,6 +209,8 @@ class IssuanceActivityStore(
             key = id,
             data = ByteString(json.encodeToString(record).encodeToByteArray()),
         )
+
+        recordsCache[id] = record
         _refresh.tryEmit(Unit)
     }
 
@@ -221,6 +233,9 @@ class IssuanceActivityStore(
     private suspend fun completeFailedLocked(err: Throwable) {
         val sid = activeSessionId ?: return
         activeSessionId = null
+        if (latestUnlinkedSessionId == sid) {
+            latestUnlinkedSessionId = null
+        }
         val existing = loadRecordLocked(sid) ?: return
         saveRecordLocked(
             existing.copy(
@@ -238,6 +253,9 @@ class IssuanceActivityStore(
             return
         }
         activeSessionId = null
+        if (latestUnlinkedSessionId == sid) {
+            latestUnlinkedSessionId = null
+        }
         saveRecordLocked(
             existing.copy(
                 endedAtEpochMs = System.currentTimeMillis(),
@@ -262,6 +280,8 @@ class IssuanceActivityStore(
             key = record.id,
             data = ByteString(json.encodeToString(record).encodeToByteArray()),
         )
+
+        recordsCache[record.id] = record
         _refresh.tryEmit(Unit)
     }
 
@@ -272,14 +292,27 @@ class IssuanceActivityStore(
     suspend fun getAllRecords(): List<IssuanceActivityRecord> {
         mutex.withLock {
             ensureTableLocked()
-            val rows = storage.getTable(tableSpec).enumerateWithData(limit = 10_000)
-            return rows.mapNotNull { (_, bytes) ->
-                try {
-                    json.decodeFromString<IssuanceActivityRecord>(bytes.toByteArray().decodeToString())
-                } catch (_: Exception) {
-                    null
+
+            if (!recordsCacheInitialized) {
+                val rows = storage.getTable(tableSpec).enumerateWithData(limit = 10_000)
+
+                recordsCache.clear()
+
+                rows.forEach { (_, bytes) ->
+                    try {
+                        val record = json.decodeFromString<IssuanceActivityRecord>(
+                            bytes.toByteArray().decodeToString()
+                        )
+                        recordsCache[record.id] = record
+                    } catch (_: Exception) {
+                        // Skip malformed records.
+                    }
                 }
-            }.sortedByDescending { it.startedAtEpochMs }
+
+                recordsCacheInitialized = true
+            }
+
+            return recordsCache.values.sortedByDescending { it.startedAtEpochMs }
         }
     }
 

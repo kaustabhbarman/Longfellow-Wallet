@@ -17,4 +17,8 @@ data class ZkpBenchmarkSnapshot(
     val peakCpuPercent: Double,
     /** Epoch milliseconds when proof generation finished (for correlating with activity events). */
     val completedAtEpochMs: Long,
+    /** Native proof byte length; excludes the ZK document data. */
+    val proofBytes: Long? = null,
+    /** Encoded CBOR byte length of the complete ZkDocument, including proof and document data. */
+    val fullZkDocumentCborBytes: Long? = null,
 )

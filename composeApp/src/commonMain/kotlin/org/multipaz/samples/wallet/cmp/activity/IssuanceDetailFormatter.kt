@@ -10,9 +10,27 @@ fun IssuanceActivityRecord.listSubtitle(): String {
         IssuanceOutcome.CANCELLED -> "Cancelled"
     }
     val doc = documentId?.let { " · doc $it" } ?: ""
+    val duration = durationMillis()?.let { " · ${formatActivityDuration(it)}" } ?: ""
     val calls = countHttpRequestsInTrace(httpTrace)
     val callsHint = if (calls > 0) " · $calls HTTP call(s)" else ""
-    return "$status · OpenID4VCI$callsHint$doc"
+    return "$status · OpenID4VCI$duration$callsHint$doc"
+}
+
+private fun IssuanceActivityRecord.durationMillis(): Long? {
+    val ended = endedAtEpochMs ?: return null
+    return (ended - startedAtEpochMs).takeIf { it >= 0L }
+}
+
+private fun formatActivityDuration(durationMs: Long): String {
+    return when {
+        durationMs < 1_000L -> "${durationMs} ms"
+        durationMs < 60_000L -> String.format("%.2f s", durationMs / 1_000.0)
+        else -> {
+            val minutes = durationMs / 60_000L
+            val seconds = (durationMs % 60_000L) / 1_000.0
+            "$minutes min ${String.format("%.1f", seconds)} s"
+        }
+    }
 }
 
 /**
@@ -37,6 +55,7 @@ fun IssuanceActivityRecord.issuanceSummarySectionText(): String = buildString {
     appendLine("Record ID: $id")
     appendLine("Started: ${startedAtEpochMs} (epoch ms)")
     appendLine("Ended: ${endedAtEpochMs ?: "—"}")
+    appendLine("Duration: ${durationMillis()?.let { formatActivityDuration(it) } ?: "unavailable"}")
     appendLine("Outcome: $outcome")
     appendLine("HTTP calls (from Ktor log): ${if (calls > 0) calls else "—"}")
     offerUri?.let { appendLine("Offer URI: $it") }
