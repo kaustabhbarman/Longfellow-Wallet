@@ -2,6 +2,7 @@ package org.multipaz.samples.wallet.cmp.benchmark
 
 import kotlin.time.Clock
 import kotlin.time.Instant
+import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.mdoc.response.MdocDocument
 import org.multipaz.mdoc.zkp.ZkDocument
@@ -28,16 +29,30 @@ class InstrumentedZkSystem(
     ): ZkDocument {
         val sampler = BenchmarkPlatform.startResourceSampler()
         val startNanos = BenchmarkPlatform.elapsedRealtimeNanos()
+        var generatedDocument: ZkDocument? = null
         try {
-            return delegate.generateProof(
+            val result = delegate.generateProof(
                 zkSystemSpec = zkSystemSpec,
                 document = document,
                 sessionTranscript = sessionTranscript,
                 timestamp = timestamp,
             )
+            generatedDocument = result
+            return result
         } finally {
+            // Stop proof-generation measurements before measuring serialized sizes.
             val endNanos = BenchmarkPlatform.elapsedRealtimeNanos()
             sampler.stop()
+
+            val proofBytes = generatedDocument?.let { zkDocument ->
+                runCatching { zkDocument.proof.size.toLong() }.getOrNull()
+            }
+            val fullZkDocumentCborBytes = generatedDocument?.let { zkDocument ->
+                runCatching {
+                    Cbor.encode(zkDocument.toDataItem()).size.toLong()
+                }.getOrNull()
+            }
+
             val completedAtMs = Clock.System.now().toEpochMilliseconds()
             val snapshot = ZkpBenchmarkSnapshot(
                 operation = "ZKP proof generation (presentation)",
@@ -47,6 +62,8 @@ class InstrumentedZkSystem(
                 peakMemoryKb = sampler.peakMemoryKb,
                 peakCpuPercent = sampler.peakCpuPercent,
                 completedAtEpochMs = completedAtMs,
+                proofBytes = proofBytes,
+                fullZkDocumentCborBytes = fullZkDocumentCborBytes,
             )
             ZkpBenchmarkStore.record(snapshot)
         }

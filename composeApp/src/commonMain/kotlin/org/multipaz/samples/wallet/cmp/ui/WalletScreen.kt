@@ -1,5 +1,7 @@
 package org.multipaz.samples.wallet.cmp.ui
 
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.CancellationException
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +66,7 @@ fun WalletScreen(
     onActivity: () -> Unit = {},
     onCreateTestMdl: () -> Unit = {},
     onCredentialOfferScanned: (String) -> Unit = {},
+    portraitCache: MutableMap<String, ImageBitmap>
 ) {
 
     /*
@@ -204,7 +207,6 @@ fun WalletScreen(
                         List<Claim>
                     >()
                 }
-
             val credentialTypesByDocument =
                 remember {
                     mutableStateMapOf<String, CredentialType>()
@@ -216,53 +218,6 @@ fun WalletScreen(
              * -------------------------------------------------
              */
 
-            documentInfos.forEach { documentInfo ->
-
-                LaunchedEffect(
-                    documentInfo.identifier
-                ) {
-
-                    try {
-
-                        val document =
-                            documentInfo.document
-
-                        val credentials =
-                            document.getCertifiedCredentials()
-
-                        val credential =
-                            credentials.firstOrNull()
-
-                        if (credential != null) {
-
-                            val detectedType = CredentialType.fromCredential(credential)
-
-                            credentialTypesByDocument[
-                                documentInfo.identifier
-                            ] = detectedType
-
-                            val documentClaims =
-                                credential.getClaims(
-                                    presentmentSource
-                                        .documentTypeRepository
-                                )
-
-                            claimsByDocument[
-                                documentInfo.identifier
-                            ] = documentClaims
-                        }
-
-                    } catch (e: Throwable) {
-
-                        Logger.e(
-                            TAG,
-                            "Unable to load claims for document " +
-                                    documentInfo.identifier,
-                            e
-                        )
-                    }
-                }
-            }
 
             /*
              * -------------------------------------------------
@@ -356,29 +311,63 @@ fun WalletScreen(
                      */
 
                     HorizontalPager(
-
-                        state =
-                            pagerState,
-
-                        modifier =
-                            Modifier.fillMaxWidth(),
-
-                        pageSpacing =
-                            12.dp,
-
-                        contentPadding =
-                            PaddingValues(
-                                horizontal = 10.dp
-                            )
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        pageSpacing = 12.dp,
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        beyondViewportPageCount = 1,
+                        key = { page -> documentInfos[page].identifier }
                     ) { page ->
+                        val documentInfo = documentInfos[page]
 
-                        val documentInfo =
-                            documentInfos[page]
+                        LaunchedEffect(documentInfo.identifier) {
+                            if (claimsByDocument[documentInfo.identifier] == null) {
+                                try {
+                                    val credentials =
+                                        documentInfo.document.getCertifiedCredentials()
 
-                        val claims =
-                            claimsByDocument[
-                                documentInfo.identifier
-                            ]
+                                    val credential = credentials.firstOrNull()
+
+                                    if (credential != null) {
+                                        val detectedType =
+                                            CredentialType.fromCredential(credential)
+
+                                        credentialTypesByDocument[
+                                            documentInfo.identifier
+                                        ] = detectedType
+
+                                        val documentClaims = credential.getClaims(
+                                            presentmentSource.documentTypeRepository
+                                        )
+
+                                        claimsByDocument[
+                                            documentInfo.identifier
+                                        ] = documentClaims
+                                    } else {
+                                        credentialTypesByDocument[
+                                            documentInfo.identifier
+                                        ] = CredentialType.UNKNOWN
+
+                                        claimsByDocument[
+                                            documentInfo.identifier
+                                        ] = emptyList()
+                                    }
+                                }catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Logger.e(
+                                        TAG,
+                                        "Unable to load claims for document ${documentInfo.identifier}",
+                                        e
+                                    )
+
+                                    credentialTypesByDocument[documentInfo.identifier] = CredentialType.UNKNOWN
+                                    claimsByDocument[documentInfo.identifier] = emptyList()
+                                }
+                            }
+                        }
+
+                        val claims = claimsByDocument[documentInfo.identifier]
 
                         /*
                          * -------------------------------------------------
@@ -417,8 +406,9 @@ fun WalletScreen(
                                     credentialType =
                                         credentialTypesByDocument[
                                             documentInfo.identifier
-                                        ] ?: CredentialType.UNKNOWN
-                                )
+                                        ] ?: CredentialType.UNKNOWN,
+                                    documentId = documentInfo.identifier,
+                                    portraitCache = portraitCache                                )
 
                             } else {
 

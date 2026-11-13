@@ -33,6 +33,17 @@ fun formatPeakMemoryKb(kilobytes: Int): String = "$kilobytes KB"
 
 fun formatPeakCpuPercent(percent: Double): String = String.format("%.1f%%", percent)
 
+fun formatBenchmarkSize(bytes: Long): String {
+    if (bytes < 1024) {
+        return "$bytes B"
+    }
+    val kb = bytes / 1024.0
+    if (kb < 1024) {
+        return String.format("%.1f KB", kb)
+    }
+    return String.format("%.2f MB", kb / 1024.0)
+}
+
 fun ZkpBenchmarkSnapshot.toLogLine(): String = buildString {
     append("operation=$operation")
     append(" zk_system=$zkSystemName")
@@ -41,6 +52,8 @@ fun ZkpBenchmarkSnapshot.toLogLine(): String = buildString {
     append(" (").append(formatProofGenerationDuration(proofGenerationNanos)).append(')')
     append(" peak_memory_kb=$peakMemoryKb")
     append(" peak_cpu_percent=").append(String.format("%.1f", peakCpuPercent))
+    proofBytes?.let { append(" proof_bytes=$it") }
+    fullZkDocumentCborBytes?.let { append(" full_zk_document_cbor_bytes=$it") }
 }
 
 fun formatZkpBenchmarkSection(
@@ -75,6 +88,10 @@ fun formatZkpBenchmarkSection(
                     "Proof generation time: ${snap.proofGenerationNanos} ns " +
                         "(${formatProofGenerationDuration(snap.proofGenerationNanos)})",
                 )
+                appendLine("Proof-only size: ${snap.proofBytes?.let { "$it bytes (${formatBenchmarkSize(it)})" } ?: "unavailable"}")
+                appendLine("Full ZK document CBOR size: ${snap.fullZkDocumentCborBytes?.let { "$it bytes (${formatBenchmarkSize(it)})" } ?: "unavailable"}")
+                appendLine("Size measurement: proof bytes are the native proof; full-document size is Cbor.encode(zkDocument.toDataItem()).")
+                appendLine("Size serialization is performed after proof-generation timing and resource sampling stop.")
                 appendLine("Peak memory usage: ${snap.peakMemoryKb} KB (Debug.MemoryInfo, sampled every 50 ms)")
                 appendLine(
                     "Peak CPU utilisation: ${
@@ -88,12 +105,12 @@ fun formatZkpBenchmarkSection(
             }
         }
         if (vpTokenBytes != null) {
-            appendLine("--- VP token payload ---")
-            appendLine("Instrument: len(base64url.decode(vp_token))")
-            appendLine("VP token payload size: $vpTokenBytes bytes (${formatVpTokenPayloadSize(vpTokenBytes)})")
+            appendLine("--- Decoded VP-token Base64URL payload ---")
+            appendLine("Instrument: sum of decoded Base64URL string bytes in vp_token JSON")
+            appendLine("Decoded VP-token payload size: $vpTokenBytes bytes (${formatVpTokenPayloadSize(vpTokenBytes)})")
         } else {
-            appendLine("--- VP token payload ---")
-            appendLine("VP token payload size: (not applicable — no vp_token on this presentation type)")
+            appendLine("--- Decoded VP-token Base64URL payload ---")
+            appendLine("Decoded VP-token payload size: (not applicable — no vp_token on this presentation type)")
         }
     }.trimEnd()
 }
@@ -113,6 +130,12 @@ fun formatZkpBenchmarkListHint(
             append("proof gen ${formatProofGenerationDuration(totalNanos)}")
             append(" · mem ${formatPeakMemoryKb(latest.peakMemoryKb)}")
             append(" · CPU ${formatPeakCpuPercent(latest.peakCpuPercent)}")
+            latest.proofBytes?.let {
+                append(" · proof ${formatBenchmarkSize(it)}")
+            }
+            latest.fullZkDocumentCborBytes?.let {
+                append(" · ZK doc ${formatBenchmarkSize(it)}")
+            }
         }
         if (vpTokenBytes != null) {
             if (generationSnapshots.isNotEmpty()) {

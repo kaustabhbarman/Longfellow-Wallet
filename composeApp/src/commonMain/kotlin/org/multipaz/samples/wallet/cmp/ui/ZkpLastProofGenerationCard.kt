@@ -1,5 +1,8 @@
 package org.multipaz.samples.wallet.cmp.ui
 
+import meinewallet.composeapp.generated.resources.activity_zkp_last_mdoc_response_none
+import meinewallet.composeapp.generated.resources.activity_zkp_last_mdoc_response_title
+import org.multipaz.samples.wallet.cmp.benchmark.formatMdocDeviceResponseSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +29,7 @@ import meinewallet.composeapp.generated.resources.activity_zkp_last_vp_token_tit
 import meinewallet.composeapp.generated.resources.activity_zkp_peak_resource_none
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.samples.wallet.cmp.benchmark.ZkpBenchmarkStore
+import org.multipaz.samples.wallet.cmp.benchmark.formatBenchmarkSize
 import org.multipaz.samples.wallet.cmp.benchmark.formatPeakCpuPercent
 import org.multipaz.samples.wallet.cmp.benchmark.formatPeakMemoryKb
 import org.multipaz.samples.wallet.cmp.benchmark.formatProofGenerationDuration
@@ -37,6 +41,7 @@ fun ZkpLastProofGenerationCard(
 ) {
     val lastProof by ZkpBenchmarkStore.lastProofGeneration.collectAsState()
     val lastVpToken by ZkpBenchmarkStore.lastVpTokenPayload.collectAsState()
+    val lastMdocResponse by ZkpBenchmarkStore.lastMdocDeviceResponse.collectAsState()
     val peakResourceNone = stringResource(Res.string.activity_zkp_peak_resource_none)
 
     Card(
@@ -127,6 +132,48 @@ fun ZkpLastProofGenerationCard(
             BenchmarkDivider()
 
             BenchmarkMetricSection(
+                title = "Previous proof-only size",
+                emptyText = "No proof size measured yet. Generate a ZKP proof first.",
+                hasValue = lastProof?.proofBytes != null,
+            ) {
+                val bytes = lastProof!!.proofBytes!!
+                Text(
+                    text = formatBenchmarkSize(bytes),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = "$bytes bytes · zkDocument.proof.size",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                )
+            }
+
+            BenchmarkDivider()
+
+            BenchmarkMetricSection(
+                title = "Previous full ZK document CBOR size",
+                emptyText = "No full ZK document size measured yet. Generate a ZKP proof first.",
+                hasValue = lastProof?.fullZkDocumentCborBytes != null,
+            ) {
+                val bytes = lastProof!!.fullZkDocumentCborBytes!!
+                Text(
+                    text = formatBenchmarkSize(bytes),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = "$bytes bytes · Cbor.encode(zkDocument.toDataItem())",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                )
+            }
+
+            BenchmarkDivider()
+
+            BenchmarkMetricSection(
                 title = stringResource(Res.string.activity_zkp_last_vp_token_title),
                 emptyText = stringResource(Res.string.activity_zkp_last_vp_token_none),
                 hasValue = lastVpToken != null,
@@ -139,7 +186,30 @@ fun ZkpLastProofGenerationCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    text = "${snapshot.payloadBytes} bytes · len(base64url.decode(vp_token))",
+                    text = "${snapshot.payloadBytes} bytes · sum of decoded Base64URL payload strings in vp_token JSON",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                )
+            }
+
+            BenchmarkDivider()
+
+            BenchmarkMetricSection(
+                title = stringResource(Res.string.activity_zkp_last_mdoc_response_title),
+                emptyText = stringResource(Res.string.activity_zkp_last_mdoc_response_none),
+                hasValue = lastMdocResponse != null,
+            ) {
+                val snapshot = lastMdocResponse!!
+
+                Text(
+                    text = formatMdocDeviceResponseSize(snapshot.responseBytes),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+
+                Text(
+                    text = "${snapshot.responseBytes} bytes · Cbor.encode(deviceResponse).size",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
                 )

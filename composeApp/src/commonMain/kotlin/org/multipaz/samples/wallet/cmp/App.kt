@@ -1,5 +1,10 @@
 package org.multipaz.samples.wallet.cmp
 
+import org.multipaz.samples.wallet.cmp.benchmark.logMdocDeviceResponseSize
+import org.multipaz.eventlogger.EventPresentment
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentUriSchemeOpenID4VP
+import org.multipaz.eventlogger.EventPresentmentDigitalCredentialsMdocApi
 import org.multipaz.prompt.PromptModel
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.samples.wallet.cmp.ui.CardArtRenderer
@@ -457,12 +462,52 @@ class App() {
                     issuanceActivityStore.onDocumentEvent(event)
                 }
             }
+
             CoroutineScope(Dispatchers.Default).launch {
+                var lastLoggedMdocTimestamp: Long? = null
+
+                suspend fun logLatestPresentationEvents() {
+                    val events = activityEventLogger.getEvents()
+
+                    // Keep the genuine OpenID4VP VP-token measurement separate.
+                    val latestVpTokenEvent = events
+                        .filter {
+                            it is EventPresentmentUriSchemeOpenID4VP ||
+                                it is EventPresentmentDigitalCredentialsOpenID4VP
+                        }
+                        .maxByOrNull {
+                            (it as EventPresentment).timestamp.toEpochMilliseconds()
+                        }
+
+                    latestVpTokenEvent?.let {
+                        logVpTokenPayloadForEvent(it)
+                    }
+
+                    // Android Digital Credentials API mdoc response measurement.
+                    val latestMdocEvent = events
+                        .filterIsInstance<EventPresentmentDigitalCredentialsMdocApi>()
+                        .maxByOrNull {
+                            it.timestamp.toEpochMilliseconds()
+                        }
+
+                    latestMdocEvent?.let { event ->
+                        val timestamp = event.timestamp.toEpochMilliseconds()
+
+                        if (timestamp != lastLoggedMdocTimestamp) {
+                            lastLoggedMdocTimestamp = timestamp
+                            logMdocDeviceResponseSize(event)
+                        }
+                    }
+                }
+
+                logLatestPresentationEvents()
+
                 activityEventLogger.eventFlow.collect {
-                    val latest = activityEventLogger.getEvents().lastOrNull() ?: return@collect
-                    logVpTokenPayloadForEvent(latest)
+                    logLatestPresentationEvents()
                 }
             }
+
+
 
             initialized = true
         }
@@ -615,7 +660,7 @@ class App() {
         private const val HAIP_VP_URL_SCHEME = "haip-vp://"
 
         val promptModel = Platform.promptModel
-        
+
         private var app: App? = null
         fun getInstance(): App {
             if (app == null) {

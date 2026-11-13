@@ -1,6 +1,11 @@
 package org.multipaz.samples.wallet.cmp.ui
 
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -27,36 +32,154 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import org.multipaz.claim.Claim
-import org.multipaz.compose.claim.RenderClaimValue
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import org.multipaz.claim.MdocClaim
+import org.multipaz.claim.JsonClaim
+import org.multipaz.compose.decodeImage
+import org.multipaz.util.fromBase64Url
+import kotlinx.serialization.json.jsonPrimitive
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import androidx.compose.runtime.getValue
+import kotlin.math.min
+
+private fun resizePortrait(
+    source: ImageBitmap,
+    maxWidth: Int = 116,
+    maxHeight: Int = 140
+): ImageBitmap {
+    if (source.width <= maxWidth && source.height <= maxHeight) {
+        return source
+    }
+
+    val scale = minOf(
+        maxWidth.toFloat() / source.width,
+        maxHeight.toFloat() / source.height
+    )
+
+    val targetWidth = (source.width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (source.height * scale).toInt().coerceAtLeast(1)
+
+    val resized = ImageBitmap(targetWidth, targetHeight)
+
+    Canvas(resized).drawImageRect(
+        image = source,
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(source.width, source.height),
+        dstOffset = IntOffset.Zero,
+        dstSize = IntSize(targetWidth, targetHeight),
+        paint = Paint()
+
+    )
+
+    return resized
+}
+
+@Composable
+private fun RememberedPortrait(
+    claim: Claim,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?
+) { val cachedBitmap = documentId?.let { portraitCache?.get(it) }
+
+    val bitmap by produceState<ImageBitmap?>(
+        initialValue = cachedBitmap,
+        key1 = documentId,
+        key2 = claim
+    ) {
+        if (value == null) {
+            value = try {
+                val decoded = withContext(Dispatchers.Default) {
+                    val bytes = when (claim) {
+                        is MdocClaim -> claim.value.asBstr
+                        is JsonClaim ->
+                            claim.value.jsonPrimitive.content.fromBase64Url()
+                    }
+                    resizePortrait(decodeImage(bytes))
+                }
+
+                documentId?.let { id ->
+                    portraitCache?.set(id, decoded)
+                }
+
+                decoded
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!,
+            contentDescription = null,
+            alignment = Alignment.TopStart,
+            modifier = Modifier.fillMaxSize()
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.LightGray)
+        )
+    }
+}
+
 
 @Composable
 fun CredentialCard(
     claims: List<Claim>,
     credentialType: CredentialType,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    documentId: String? = null,
+    portraitCache: MutableMap<String, ImageBitmap>? = null
 ) {
-    val data = CardData.fromClaims(claims)
+    val data = remember(claims) {
+        CardData.fromClaims(claims)
+    }
 
     when (credentialType) {
         CredentialType.DRIVING_LICENCE ->
-            DrivingLicenceIdentityCard(data, modifier)
+            DrivingLicenceIdentityCard(
+                data,
+                modifier,
+                documentId,
+                portraitCache
+            )
 
         CredentialType.GERMAN_PERSONAL_ID ->
-            GermanPersonalIdCard(data, modifier)
+            GermanPersonalIdCard(   data,
+                modifier,
+                documentId,
+                portraitCache
+            )
 
         CredentialType.EU_PERSONAL_ID ->
-            EuPersonalIdCard(data, modifier)
+            EuPersonalIdCard(data, modifier,
+                documentId,
+                portraitCache
+            )
 
         CredentialType.UNKNOWN ->
-            GenericCredentialCard(data, modifier)
+            GenericCredentialCard(data, modifier,
+                documentId,
+                portraitCache
+            )
     }
 }
 
 @Composable
 private fun GermanPersonalIdCard(
     data: CardData,
-    modifier: Modifier
-) {
+    modifier: Modifier,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?
+){
     IdentityCard(
         title = "PERSONAL ID CARD",
         subtitle = "FEDERAL REPUBLIC OF GERMANY",
@@ -70,6 +193,8 @@ private fun GermanPersonalIdCard(
         authorityLabel = "ISSUING AUTHORITY",
         data = data,
         modifier = modifier,
+        documentId = documentId,
+        portraitCache = portraitCache,
         cardColors = listOf(
             Color(0xFFE8E4D9),
             Color(0xFFDFDBCF),
@@ -82,7 +207,9 @@ private fun GermanPersonalIdCard(
 @Composable
 private fun EuPersonalIdCard(
     data: CardData,
-    modifier: Modifier
+    modifier: Modifier,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?
 ) {
     IdentityCard(
         title = "EU PERSONAL ID",
@@ -96,14 +223,18 @@ private fun EuPersonalIdCard(
         expiryDateLabel = "EXPIRES",
         authorityLabel = "ISSUING AUTHORITY",
         data = data,
-        modifier = modifier
+        modifier = modifier,
+        documentId = documentId,
+        portraitCache = portraitCache
     )
 }
 
 @Composable
 private fun DrivingLicenceIdentityCard(
     data: CardData,
-    modifier: Modifier
+    modifier: Modifier,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?
 ) {
     IdentityCard(
         title = "DIGITAL DRIVING LICENCE",
@@ -119,6 +250,8 @@ private fun DrivingLicenceIdentityCard(
         documentNumberLabel = "LICENCE NO.",
         data = data,
         modifier = modifier,
+        documentId = documentId,
+        portraitCache = portraitCache,
         cardColors = listOf(
             Color(0xFFE1BCC7),
             Color(0xFFAAC6C1),
@@ -131,7 +264,9 @@ private fun DrivingLicenceIdentityCard(
 @Composable
 private fun GenericCredentialCard(
     data: CardData,
-    modifier: Modifier
+    modifier: Modifier,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?
 ) {
     IdentityCard(
         title = "DIGITAL CREDENTIAL",
@@ -145,7 +280,9 @@ private fun GenericCredentialCard(
         expiryDateLabel = "EXPIRES",
         authorityLabel = "ISSUING AUTHORITY",
         data = data,
-        modifier = modifier
+        modifier = modifier,
+        documentId = documentId,
+        portraitCache = portraitCache
     )
 }
 
@@ -164,6 +301,8 @@ private fun IdentityCard(
     documentNumberLabel: String? = null,
     data: CardData,
     modifier: Modifier,
+    documentId: String?,
+    portraitCache: MutableMap<String, ImageBitmap>?,
     cardColors: List<Color> = listOf(
         Color(0xFFFAFAF8),
         Color(0xFFF0F0EC)
@@ -299,8 +438,10 @@ private fun IdentityCard(
                             .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        RenderClaimValue(
-                            claim = data.portraitClaim.withPictureAttributeForCard()
+                        RememberedPortrait(
+                            claim = data.portraitClaim,
+                            documentId = documentId,
+                            portraitCache = portraitCache
                         )
                     }
                 }

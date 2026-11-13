@@ -1,5 +1,8 @@
 package org.multipaz.samples.wallet.cmp.navhost
 
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -19,6 +22,10 @@ fun AppNavHost(
     imageLoader: ImageLoader,
 ) {
     val navController = rememberNavController()
+    val portraitBitmapsByDocument =
+        remember {
+            mutableStateMapOf<String, ImageBitmap>()
+        }
     val provisioningState by app.provisioningModel.state.collectAsState()
 
     LaunchedEffect(provisioningState) {
@@ -51,6 +58,7 @@ fun AppNavHost(
                 documentStore = app.documentStore,
                 activityEventLogger = app.activityEventLogger,
                 issuanceActivityStore = app.issuanceActivityStore,
+                portraitCache = portraitBitmapsByDocument,
                 onCreateTestMdl = { app.createLocalTestMdl() },
                 onCredentialOfferScanned = { uri ->
                     app.handleUrl(uri)

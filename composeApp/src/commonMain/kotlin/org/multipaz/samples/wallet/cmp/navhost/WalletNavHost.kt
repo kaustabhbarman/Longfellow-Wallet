@@ -1,7 +1,8 @@
 package org.multipaz.samples.wallet.cmp.navhost
 
-
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,8 +36,9 @@ fun WalletNavHost(
     documentStore: DocumentStore,
     activityEventLogger: SimpleEventLogger,
     issuanceActivityStore: IssuanceActivityStore,
+    portraitCache: MutableMap<String, ImageBitmap>,
     onCreateTestMdl: () -> Unit = {},
-    onCredentialOfferScanned: (String) -> Unit = {},
+    onCredentialOfferScanned: (String) -> Unit = {}
 ) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
@@ -90,6 +92,7 @@ fun WalletNavHost(
                 documentModel = documentModel,
                 settingsModel = settingsModel,
                 presentmentSource = presentmentSource,
+                portraitCache = portraitCache,
                 onDocumentSelected = { documentInfo ->
                     navController.navigate(
                         WalletRoute.WalletDetails(
